@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "rootDir": "../..",
+    "types": ["@cloudflare/workers-types"],
+    "ignoreDeprecations": "5.0"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wordchain",
+      "database_id": "23ae90ef-0bbf-4e34-99ac-8afe1e549886"
+    }
+  ]
+
+}

@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "baseUrl": ".",
+    "paths": {
+        "@wordchain/shared": ["packages/shared/src/index.ts"],
+        "@wordchain/shared/*": ["packages/shared/src/*"],
+        "@wordchain/socket-events": ["packages/socket-events/src/index.ts"],
+        "@wordchain/game-engine": ["packages/game-engine/src/index.ts"],
+        "@wordchain/dictionary": ["packages/dictionary/src/index.ts"]
+    }
+  },
+
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wordchain",
+      "database_id": "23ae90ef-0bbf-4e34-99ac-8afe1e549886"
+    }
+  ]
+
+}

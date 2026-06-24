@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "ignoreDeprecations": "5.0",
+    "paths": {
+        "@/*": ["./*"],
+        "@wordchain/shared": ["../../packages/shared/src/index.ts"],
+        "@wordchain/socket-events": ["../../packages/socket-events/src/index.ts"],
+        "@wordchain/game-engine": ["../../packages/game-engine/src/index.ts"],
+        "@wordchain/dictionary": ["../../packages/dictionary/src/index.ts"]
+}
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

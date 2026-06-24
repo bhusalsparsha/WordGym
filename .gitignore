@@ -1,0 +1,14 @@
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+pnpm-lock.yaml
+.dev.vars
+**/.wrangler/
+node_modules/
+.next/
+dist/
+.turbo/
+.DS_Store
+**/wrangler.toml

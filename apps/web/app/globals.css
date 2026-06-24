@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background-color: #121211;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  color: #f5f5f3;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-baskerville), 'Libre Baskerville', Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgba(217, 119, 6, 0.24);
+  color: white;
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-xl border border-[#2e2e2a] bg-[#1e1e1c] shadow-sm;
+  }
+
+  .glass-panel {
+    @apply rounded-xl border border-[#2e2e2a] bg-[#1c1c1a] shadow-md;
+  }
+
+  .neo-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition duration-200 ease-out;
+  }
+
+  .neo-button-primary {
+    @apply neo-button bg-primary text-white hover:bg-amber-700 active:scale-[0.98];
+  }
+
+  .neo-button-secondary {
+    @apply neo-button border border-[#2e2e2a] bg-[#1e1e1c] text-[#f5f5f3] hover:bg-[#252522] active:scale-[0.98];
+  }
+
+  .label-chip {
+    @apply inline-flex items-center gap-2 rounded-lg border border-[#2e2e2a] bg-[#1e1e1c] px-3 py-1 text-xs font-medium text-slate-300;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-[#2e2e2a] bg-[#1a1a19] px-4 py-2.5 text-sm text-[#f5f5f3] outline-none transition placeholder:text-slate-500 focus:border-[#d97706] focus:ring-1 focus:ring-[#d97706]/30;
+  }
+}

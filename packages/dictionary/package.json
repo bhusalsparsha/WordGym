@@ -1,0 +1,15 @@
+{
+  "name": "@wordchain/dictionary",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate:words": "tsx --tsconfig scripts/tsconfig.json scripts/generate-words.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3"
+  }
+}

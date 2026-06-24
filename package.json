@@ -1,0 +1,24 @@
+{
+  "name": "word-chain",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260610.1",
+    "an-array-of-english-words": "^2.0.0",
+    "prettier": "^3.5.3",
+    "tsx": "^4.22.4",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.98.0"
+  },
+  "dependencies": {
+    "next": "^16.2.9"
+  }
+}

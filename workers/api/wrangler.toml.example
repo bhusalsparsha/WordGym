@@ -1,0 +1,29 @@
+name = "replaceme-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-09"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CORS_ORIGIN = "REPLACE_ME"
+JWT_ISSUER = "REPLACE_ME"
+JWT_AUDIENCE = "REPLACE_ME"
+
+# JWT_SECRET is set via Cloudflare secrets:
+# wrangler secret put JWT_SECRET
+
+[[d1_databases]]
+binding = "DB"
+database_name = "REPLACE_ME"
+database_id = "REPLACE_ME"
+
+[[kv_namespaces]]
+binding = "CONFIG"
+id = "REPLACE_ME"
+
+[[queues.producers]]
+binding = "QUEUE"
+queue = "REPLACE_ME"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDurableObject"
