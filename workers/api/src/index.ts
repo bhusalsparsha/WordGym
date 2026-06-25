@@ -146,12 +146,11 @@ if (wsMatch && request.method === 'GET') {
       return jsonResponse({ error: 'Not found' }, { status: 404 }, origin);
 
     } catch (err: any) {
-      // Catches database crashes cleanly and pass back meaningful context with full CORS headers
-      return jsonResponse(
-        { error: err?.message || 'Internal Server Error' }, 
-        { status: 500 }, 
-        origin
-      );
-    }
+    return jsonResponse(
+    { error: 'Internal Server Error', detail: err?.message ?? String(err) },
+    { status: 500 },
+    origin
+  );
+}
   },
 };
