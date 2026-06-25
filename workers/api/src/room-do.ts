@@ -591,14 +591,17 @@ if (playerId) {
       if (!data) {
         return;
       }
+      const resolvedPlayerId = this.clientPlayers.get(server)   
+    ?? (data as ClientMessage & { playerId?: string }).playerId
+    ?? (data.payload as { playerId?: string } | undefined)?.playerId;
+    
 
       const response = await this.handleAction({
         event: data.event,
         payload: data.payload,
         requestId: data.requestId,
         roomCode: this.room?.roomCode ?? '',
-        playerId: (data as ClientMessage & { playerId?: string }).playerId
-          ?? (data.payload as { playerId?: string } | undefined)?.playerId,
+        playerId: resolvedPlayerId,
       });
 
       if (data.requestId) {

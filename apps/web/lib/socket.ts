@@ -121,7 +121,7 @@ class WorkerSocketBridge {
       if (data.room?.roomCode) {
         this.activeRoomCode = data.room.roomCode;
         this.activePlayerId = data.playerId ?? null;
-        await this.openRoomSocket(data.room.roomCode);
+        await this.openRoomSocket(data.room.roomCode, data.playerId);
       }
 
       ack?.({ room: data.room, player: { id: data.playerId } });
@@ -147,7 +147,7 @@ class WorkerSocketBridge {
       if (data.room?.roomCode) {
         this.activeRoomCode = data.room.roomCode;
         this.activePlayerId = data.playerId ?? null;
-        await this.openRoomSocket(data.room.roomCode);
+        await this.openRoomSocket(data.room.roomCode, data.playerId);
       }
 
       ack?.({ room: data.room, player: { id: data.playerId } });
@@ -183,7 +183,8 @@ class WorkerSocketBridge {
 } satisfies ClientMessageEnvelope));
   }
 
-  private async openRoomSocket(roomCode: string) {
+  private async openRoomSocket(roomCode: string, playerId?: string) {
+    const effectivePlayerId = playerId ?? this.activePlayerId;
     if (this.roomSocket && this.activeRoomCode === roomCode && this.roomSocket.readyState === WebSocket.OPEN) {
       return;
     }
@@ -192,8 +193,8 @@ class WorkerSocketBridge {
       this.roomSocket.close();
     }
 
-    const playerQuery = this.activePlayerId ? `?playerId=${encodeURIComponent(this.activePlayerId)}` : '';
-    const roomSocket = new WebSocket(`${this.websocketBaseUrl}/${roomCode}/ws${playerQuery}`);
+  const playerQuery = effectivePlayerId ? `?playerId=${encodeURIComponent(effectivePlayerId)}` : '';
+  const roomSocket = new WebSocket(`${this.websocketBaseUrl}/${roomCode}/ws${playerQuery}`);
     this.roomSocket = roomSocket;
     this.activeRoomCode = roomCode;
 
