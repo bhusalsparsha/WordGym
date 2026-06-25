@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      {/* Edu NSW ACT Hand Cursive loaded via <link> since next/font doesn't support it */}
+      {/* Edu NSW ACT Hand Cursive loaded via googlefonts since next/font doesn't support it */}
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Edu+NSW+ACT+Hand+Cursive:wght@400;700&display=swap"
