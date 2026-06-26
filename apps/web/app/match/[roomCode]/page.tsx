@@ -288,11 +288,11 @@ export default function MatchEndPage() {
                       <span className={`text-sm font-semibold ${isCurrent ? 'text-amber-400' : 'text-[#f5f5f3]'}`}>
                         {player.username} {isCurrent && '(You)'}
                       </span>
-                      {player.isSpectator && (
+                      {/* {player.isSpectator && (
                         <span className="rounded bg-[#2e2e2a] text-[9px] px-1.5 py-0.5 text-[#8f8f8c] font-bold uppercase tracking-wider">
                           Spectator
                         </span>
-                      )}
+                      )} */}
                     </div>
                     <div>
                       {isDisconnected ? (

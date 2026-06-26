@@ -142,7 +142,10 @@ private static readonly DISCONNECT_ALARM_PREFIX = 'disconnect:';
   });
   if (remaining.size > 0) {
     const nextDue = Math.min(...remaining.values());
-    const turnExpiry = this.room.state?.turnExpiresAt ?? Infinity;
+    const turnExpiryVal = this.room.state?.turnExpiresAt
+      ? new Date(this.room.state.turnExpiresAt).getTime()
+      : Infinity;
+    const turnExpiry = isNaN(turnExpiryVal) ? Infinity : turnExpiryVal;
     if (now < turnExpiry) {
       // Turn timer hasn't expired yet — safe to wait for grace period.
       await this.state.storage.setAlarm(Math.min(nextDue, turnExpiry));
@@ -153,6 +156,19 @@ private static readonly DISCONNECT_ALARM_PREFIX = 'disconnect:';
   }
 
     if (this.room.state?.status === 'active') {
+      // Guard: only proceed with elimination if the turn timer has actually expired.
+      // This prevents a race condition where alarm() fires concurrently with a
+      // word submission (accepted or rejected) and falsely eliminates the player.
+      const turnExpiryVal = this.room.state.turnExpiresAt
+        ? new Date(this.room.state.turnExpiresAt).getTime()
+        : 0;
+      const turnExpiry = isNaN(turnExpiryVal) ? 0 : turnExpiryVal;
+      if (now < turnExpiry) {
+        // Turn is still live — reschedule alarm and do nothing else.
+        await this.state.storage.setAlarm(turnExpiry);
+        return;
+      }
+
       const activePlayers = this.room.players.filter((p) => !p.isEliminated && !p.isSpectator);
       const losingPlayer = this.room.state.players[this.room.state.currentTurnIndex];
 
@@ -178,7 +194,11 @@ private static readonly DISCONNECT_ALARM_PREFIX = 'disconnect:';
           p.id === losingPlayer?.id ? { ...p, isEliminated: true, isSpectator: true } : p,
         );
         await this.persistRoom();
-        await this.state.storage.setAlarm(this.room.state.turnExpiresAt ?? now);
+        const nextExpiryVal = this.room.state.turnExpiresAt
+          ? new Date(this.room.state.turnExpiresAt).getTime()
+          : now;
+        const nextExpiry = isNaN(nextExpiryVal) ? now : nextExpiryVal;
+        await this.state.storage.setAlarm(nextExpiry);
 
         const eliminatedPayload: PlayerEliminatedPayload = {
           roomCode: this.room.roomCode,
@@ -405,116 +425,101 @@ private static readonly DISCONNECT_ALARM_PREFIX = 'disconnect:';
     }
   }
 
-  private async submitWord(playerId: string, payload?: { word?: string }): Promise<Response> {
-    if (!this.room?.state) {
-      return Response.json({ error: 'Match has not started' }, { status: 400 });
-    }
+private async submitWord(playerId: string, payload?: { word?: string }): Promise<Response> {
+  if (!this.room?.state) {
+    return Response.json({ error: 'Match has not started' }, { status: 400 });
+  }
 
-    const player = [...this.room.players, ...this.room.spectators].find((p) => p.id === playerId);
-    if (player?.isSpectator || player?.isEliminated) {
-      return Response.json({ error: 'Spectators and eliminated players cannot submit words' }, { status: 403 });
-    }
+  const player = [...this.room.players, ...this.room.spectators].find((p) => p.id === playerId);
+  if (player?.isSpectator || player?.isEliminated) {
+    return Response.json({ error: 'Spectators and eliminated players cannot submit words' }, { status: 403 });
+  }
 
-    const now = Date.now();
-    const result = submitWord(this.room.state, {
-      playerId,
-      word: payload?.word ?? '',
-      dictionary: this.dictionary,
-      submittedAt: now,
+  const now = Date.now();
+  const result = submitWord(this.room.state, {
+    playerId,
+    word: payload?.word ?? '',
+    dictionary: this.dictionary,
+    submittedAt: now,
+  });
+
+  if (result.submissionStatus === 'accepted') {
+    // Only commit engine state on acceptance. On rejection, the engine may
+    // have internally flagged the player as eliminated (its own rule), but
+    // we don't want that side-effect — elimination is solely driven by
+    // alarm() / turn-timer expiry in this DO. Keeping the pre-submission
+    // state on rejection means the player can keep trying until the clock runs out.
+    this.room.state = result.state;
+
+    // Sync scores from the engine; deliberately do NOT spread other engine
+    // flags (isEliminated, isSpectator) so DO-level state stays authoritative.
+    this.room.players = this.room.players.map((roomPlayer) => {
+      const enginePlayer = result.state.players.find((p) => p.id === roomPlayer.id);
+      if (!enginePlayer) return roomPlayer;
+      return { ...roomPlayer, score: enginePlayer.score };
     });
 
-    this.room.state = result.state;
-    this.room.players = result.state.players.map(({ lastSubmissionAt, ...player }) => player);
-
-    const timerExpiresAtISO = result.state.turnExpiresAt ? new Date(result.state.turnExpiresAt).toISOString() : null;
+    const timerExpiresAtISO = result.state.turnExpiresAt
+      ? new Date(result.state.turnExpiresAt).toISOString()
+      : null;
     const nextPlayerId = result.state.players[result.state.currentTurnIndex]?.id ?? playerId;
 
-    if (result.submissionStatus === 'accepted') {
-      await this.persistRoom();
-      await this.state.storage.setAlarm(result.state.turnExpiresAt ?? now);
-      // Send acceptance feedback only to the player who submitted
-      this.sendToPlayer(playerId, SOCKET_EVENTS.WORD_ACCEPTED, {
-        roomCode: this.room.roomCode,
-        word: result.move?.word ?? '',
-        playerId,
-        nextRequiredLetter: result.state.requiredLetter ?? '',
-        timerExpiresAt: timerExpiresAtISO,
-        score: this.room.players.find((player) => player.id === playerId)?.score ?? 0,
-      });
-      this.broadcast(SOCKET_EVENTS.TURN_CHANGED, {
-        roomCode: this.room.roomCode,
-        playerId: nextPlayerId,
-        timerExpiresAt: timerExpiresAtISO,
-        requiredLetter: result.state.requiredLetter ?? null,
-      });
-      this.broadcast(SOCKET_EVENTS.TIMER_UPDATED, {
-        roomCode: this.room.roomCode,
-        turnExpiresAt: timerExpiresAtISO,
-      });
-      // Notify the next player that it is their turn
-      const yourTurnPayload: YourTurnPayload = {
-        roomCode: this.room.roomCode,
-        requiredLetter: result.state.requiredLetter ?? null,
-        timerExpiresAt: timerExpiresAtISO,
-      };
-      this.sendToPlayer(nextPlayerId, SOCKET_EVENTS.YOUR_TURN, yourTurnPayload);
-    } else {
-      // Send the rejection message only to the player who submitted
-      this.sendToPlayer(playerId, SOCKET_EVENTS.WORD_REJECTED, {
-        roomCode: this.room.roomCode,
-        word: payload?.word ?? '',
-        reason: result.rejectionReason ?? 'Invalid word.',
-      });
-
-      // In 3+ player games, a rejected word eliminates that player
-      const activePlayers = this.room.players.filter((p) => !p.isEliminated && !p.isSpectator);
-      if (activePlayers.length > 2) {
-        const newState = eliminatePlayer(this.room.state, playerId, now);
-        if (newState) {
-          this.room.state = newState;
-          this.room.players = this.room.players.map((p) =>
-            p.id === playerId ? { ...p, isEliminated: true, isSpectator: true } : p,
-          );
-          await this.persistRoom();
-          await this.state.storage.setAlarm(this.room.state.turnExpiresAt ?? now);
-          const eliminatedPayload: PlayerEliminatedPayload = {
-            roomCode: this.room.roomCode,
-            playerId,
-            remainingPlayerIds: this.room.players.filter((p) => !p.isEliminated).map((p) => p.id),
-          };
-          this.broadcast(SOCKET_EVENTS.PLAYER_ELIMINATED, eliminatedPayload);
-          const nextAfterElim = this.room.state.players[this.room.state.currentTurnIndex]?.id ?? '';
-          const elimTimerISO = this.room.state.turnExpiresAt ? new Date(this.room.state.turnExpiresAt).toISOString() : null;
-          this.broadcast(SOCKET_EVENTS.TURN_CHANGED, {
-            roomCode: this.room.roomCode,
-            playerId: nextAfterElim,
-            timerExpiresAt: elimTimerISO,
-            requiredLetter: this.room.state.requiredLetter ?? null,
-          });
-          if (nextAfterElim) {
-            this.sendToPlayer(nextAfterElim, SOCKET_EVENTS.YOUR_TURN, {
-              roomCode: this.room.roomCode,
-              requiredLetter: this.room.state.requiredLetter ?? null,
-              timerExpiresAt: elimTimerISO,
-            } satisfies YourTurnPayload);
-          }
-          this.broadcastSnapshot();
-          return Response.json({ room: this.toSnapshot(), accepted: false });
-        }
-        // Only 2 remain — fall through to endGame below
-      }
-
-      await this.persistRoom();
-    }
-
+    await this.persistRoom();
+    const resultExpiryVal = result.state.turnExpiresAt
+      ? new Date(result.state.turnExpiresAt).getTime()
+      : now;
+    const resultExpiry = isNaN(resultExpiryVal) ? now : resultExpiryVal;
+    await this.state.storage.setAlarm(resultExpiry);
+    this.sendToPlayer(playerId, SOCKET_EVENTS.WORD_ACCEPTED, {
+      roomCode: this.room.roomCode,
+      word: result.move?.word ?? '',
+      playerId,
+      nextRequiredLetter: result.state.requiredLetter ?? '',
+      timerExpiresAt: timerExpiresAtISO,
+      score: this.room.players.find((p) => p.id === playerId)?.score ?? 0,
+    });
+    this.broadcast(SOCKET_EVENTS.TURN_CHANGED, {
+      roomCode: this.room.roomCode,
+      playerId: nextPlayerId,
+      timerExpiresAt: timerExpiresAtISO,
+      requiredLetter: result.state.requiredLetter ?? null,
+    });
+    this.broadcast(SOCKET_EVENTS.TIMER_UPDATED, {
+      roomCode: this.room.roomCode,
+      turnExpiresAt: timerExpiresAtISO,
+    });
+    this.sendToPlayer(nextPlayerId, SOCKET_EVENTS.YOUR_TURN, {
+      roomCode: this.room.roomCode,
+      requiredLetter: result.state.requiredLetter ?? null,
+      timerExpiresAt: timerExpiresAtISO,
+    } satisfies YourTurnPayload);
     if (result.state.status === 'finished') {
       await this.persistMatchSummary(result.state.winnerId ?? null);
       this.broadcast(SOCKET_EVENTS.GAME_OVER, this.createGameOverPayload('victory', result.state.winnerId ?? null));
     }
+  } else {
+      // 'rejected' — invalid word. Player keeps their turn.
+  // Do NOT commit result.state. Elimination is alarm()'s responsibility only.
+  this.sendToPlayer(playerId, SOCKET_EVENTS.WORD_REJECTED, {
+    roomCode: this.room.roomCode,
+    word: payload?.word ?? '',
+    reason: result.rejectionReason ?? 'Invalid word.',
+  });
 
-    this.broadcastSnapshot();
-    return Response.json({ room: this.toSnapshot(), accepted: result.submissionStatus === 'accepted' });
+  // Re-arm the alarm so the turn timer continues ticking normally.
+  if (this.room.state.turnExpiresAt) {
+    const roomExpiryVal = new Date(this.room.state.turnExpiresAt).getTime();
+    if (!isNaN(roomExpiryVal)) {
+      await this.state.storage.setAlarm(roomExpiryVal);
+    }
   }
+
+  await this.persistRoom();
+  }
+
+  this.broadcastSnapshot();
+  return Response.json({ room: this.toSnapshot(), accepted: result.submissionStatus === 'accepted' });
+}
 
   private async startMatch(): Promise<void> {
     if (!this.room) {
@@ -533,7 +538,11 @@ private static readonly DISCONNECT_ALARM_PREFIX = 'disconnect:';
     this.room.status = 'live';
     this.room.matchId = this.room.matchId ?? createId('match');
     await this.persistRoom();
-    await this.state.storage.setAlarm(this.room.state.turnExpiresAt ?? Date.now());
+    const startExpiryVal = this.room.state.turnExpiresAt
+      ? new Date(this.room.state.turnExpiresAt).getTime()
+      : Date.now();
+    const startExpiry = isNaN(startExpiryVal) ? Date.now() : startExpiryVal;
+    await this.state.storage.setAlarm(startExpiry);
 
     const startTimerISO = this.room.state.turnExpiresAt ? new Date(this.room.state.turnExpiresAt).toISOString() : null;
     this.broadcast(SOCKET_EVENTS.GAME_STARTED, { roomCode: this.room.roomCode, room: this.toSnapshot() });
@@ -577,7 +586,10 @@ if (playerId) {
   // restore the alarm to the turn expiry so the turn timer still works.
   void this.state.storage.list({ prefix: RoomDurableObject.DISCONNECT_ALARM_PREFIX }).then((entries) => {
     if (entries.size === 0 && this.room?.state?.turnExpiresAt) {
-      void this.state.storage.setAlarm(this.room.state.turnExpiresAt);
+      const socketExpiryVal = new Date(this.room.state.turnExpiresAt).getTime();
+      if (!isNaN(socketExpiryVal)) {
+        void this.state.storage.setAlarm(socketExpiryVal);
+      }
     }
   });
 
@@ -788,7 +800,11 @@ if (playerId) {
     this.room.rematchStartAt = null;
 
     await this.persistRoom();
-    await this.state.storage.setAlarm(this.room.state.turnExpiresAt ?? Date.now());
+    const rematchExpiryVal = this.room.state.turnExpiresAt
+      ? new Date(this.room.state.turnExpiresAt).getTime()
+      : Date.now();
+    const rematchExpiry = isNaN(rematchExpiryVal) ? Date.now() : rematchExpiryVal;
+    await this.state.storage.setAlarm(rematchExpiry);
 
     const rematchTimerISO = this.room.state.turnExpiresAt ? new Date(this.room.state.turnExpiresAt).toISOString() : null;
     this.broadcast(SOCKET_EVENTS.GAME_STARTED, { roomCode: this.room.roomCode, room: this.toSnapshot() });
@@ -850,7 +866,7 @@ if (playerId) {
           playerNumber: p.playerNumber ?? i + 1,
         }));
       }
-
+      
       storedRoom.rematchRequests ??= [];
       storedRoom.rematchStartAt ??= null;
       storedRoom.spectators ??= [];
@@ -907,4 +923,3 @@ if (playerId) {
     };
   }
 }
-

@@ -224,23 +224,41 @@ export function submitWord(state: WordChainState, input: SubmitWordInput): Submi
     };
   }
 
-  const submittedAt = input.submittedAt ?? Date.now();
-  if (state.turnExpiresAt !== null && submittedAt > state.turnExpiresAt) {
-    const losingPlayer = activePlayer;
-    return {
-      state: endGame(state, state.players.find((player) => player.id !== losingPlayer.id)?.id ?? null, submittedAt),
-      submissionStatus: 'expired',
-      rejectionReason: 'The submission arrived after the timer expired.',
-    };
-  }
+  // const turnExpiresAt = state.turnExpiresAt !== null ? new Date(state.turnExpiresAt).getTime() : null;
+  const submittedAt = new Date(input.submittedAt ?? Date.now()).getTime();
+
+  // // FIX: Properly handle timer expiration for games with 3+ players
+  // if (turnExpiresAt !== null && !isNaN(turnExpiresAt) && submittedAt > turnExpiresAt) {
+  //   const activePlayers = state.players.filter((p) => !p.isEliminated && !p.isSpectator);
+
+  //   if (activePlayers.length > 2) {
+  //     // 3+ players remaining: Eliminate the current player and move to the next turn
+  //     const nextState = eliminatePlayer(state, activePlayer.id, submittedAt);
+  //     return {
+  //       state: nextState || state, // Fallback to current state if eliminatePlayer somehow returns null
+  //       submissionStatus: 'expired',
+  //       rejectionReason: 'The submission arrived after the timer expired.',
+  //     };
+  //   } else {
+  //     // Only 2 players remaining: End the game and declare the other player the winner
+  //     const winner = activePlayers.find((player) => player.id !== activePlayer.id);
+  //     return {
+  //       state: endGame(state, winner?.id ?? null, submittedAt),
+  //       submissionStatus: 'expired',
+  //       rejectionReason: 'The submission arrived after the timer expired.',
+  //     };
+  //   }
+  // }
 
   const validation = validateWord({
+
     word: input.word,
     requiredLetter: state.requiredLetter,
     usedWords: new Set(state.usedWords),
     dictionary: input.dictionary,
   });
 
+  // Invalid words are simply rejected, allowing the player to try again before the timer expires
   if (!validation.valid || !validation.normalizedWord) {
     return {
       state,
@@ -261,11 +279,11 @@ export function submitWord(state: WordChainState, input: SubmitWordInput): Submi
       : player,
   );
 
-  const activePlayers = updatedPlayers.filter((p) => !p.isEliminated && !p.isSpectator);
+  const nextActivePlayers = updatedPlayers.filter((p) => !p.isEliminated && !p.isSpectator);
   let nextTurnIndex = state.currentTurnIndex;
-  if (activePlayers.length > 0) {
-    const currentActiveIdx = activePlayers.findIndex((p) => p.id === input.playerId);
-    const nextActivePlayer = activePlayers[(currentActiveIdx + 1) % activePlayers.length];
+  if (nextActivePlayers.length > 0) {
+    const currentActiveIdx = nextActivePlayers.findIndex((p) => p.id === input.playerId);
+    const nextActivePlayer = nextActivePlayers[(currentActiveIdx + 1) % nextActivePlayers.length];
     nextTurnIndex = updatedPlayers.findIndex((p) => p.id === nextActivePlayer?.id);
   }
 
@@ -294,7 +312,7 @@ export function toRoomSnapshot(state: WordChainState): RoomSnapshot {
     status: state.status === 'active' ? 'live' : state.status === 'waiting' ? 'lobby' : 'finished',
     mode: state.mode,
     players: state.players.map(({ lastSubmissionAt, ...player }) => player),
-    currentTurnPlayerId: currentPlayer?.id ?? null,  // add this
+    currentTurnPlayerId: currentPlayer?.id ?? null,
     currentWord: state.currentWord,
     requiredLetter: state.requiredLetter,
     turnExpiresAt: state.turnExpiresAt ? new Date(state.turnExpiresAt).toISOString() : null,
